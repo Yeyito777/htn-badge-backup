@@ -1,0 +1,13 @@
+# Firmware, credentials, device identity, and generated local data stay private.
+backups/
+*.bin
+*.nes
+*.elf
+*.log
+manifest.json
+manifest.tmp
+SHA256SUMS
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
