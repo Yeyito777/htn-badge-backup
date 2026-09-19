@@ -1,146 +1,185 @@
-# Hack the North badge backup
+# Hack the North · Badge Backup
 
-A small **read-only flash-backup tool** for the **Hack the North 2026
-ESP32-C3 / 4 MiB badge**. Save your own badge's firmware and storage before
-experimenting with native firmware.
+**Back up and restore your HTN 2026 badge using a little terminal menu.**
+No serial-port arguments, flash addresses, or esptool commands to memorize.
 
-- Reads **all 4 MiB**, not just the application.
-- Verifies the saved dump against the device's flash digest while its app
-  remains stopped.
-- Records a local SHA-256 and manifest, including your badge's USB identity.
-- Refuses ambiguous device selection, missing identity, wrong chip/flash
-  size, existing output folders, and incomplete files.
-- Never calls write-flash, erase-flash, or an eFuse-writing command.
-- Reboots the existing application after a successful backup by default.
-
-**Backing up still resets the badge and interrupts the current game/app.**
-Close serial monitors, browser IDE connections, and other esptool processes.
-Do not run two backup processes against the same badge at once.
-
-This repo contains **no badge firmware, ROMs, contacts, or recovery images**.
-Back up your own device. A dump can contain credentials, Wi-Fi details,
-contacts, and personal data: **never post it on GitHub**.
-
-## Setup
-
-Python **3.10+**, a USB data cable, and access to the serial port are required.
-ESP-IDF and a C compiler are **not** required.
-
-```sh
-git clone https://github.com/Yeyito777/htn-badge-backup.git
-cd htn-badge-backup
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python badge_backup.py list
+```text
+╭─────────────────────────────────────────────────────╮
+│ Hack the North · Badge Backup                       │
+│ ESP32-C3 / 4 MiB • backups stay on this computer     │
+│                                                     │
+│ 1  Back up my badge                                  │
+│ 2  Restore a saved backup                            │
+│ 3  Check a saved backup                              │
+│ 4  Connection / recovery help                        │
+│ 0  Quit                                             │
+╰─────────────────────────────────────────────────────╯
+Choose: _
 ```
 
-Windows PowerShell activation: `.\.venv\Scripts\Activate.ps1`, or call
-`.\.venv\Scripts\python.exe` directly. On Linux, configure your distribution's
-serial-port permissions; do not run the whole tool as root just to bypass them.
+## Start here
+
+1. Install **Python 3.10 or newer** if you don't have it.
+2. Download this repository using **Code → Download ZIP**, then extract it,
+   or clone it with Git.
+3. Start the launcher:
+   - **macOS:** open `start.command`.
+   - **Windows:** open `start.bat`.
+   - **Linux / any terminal:** run `python3 start.py`.
+4. On first launch, type `y` to install the pinned dependencies into this
+   folder's `.venv`. Future launches go straight to the menu.
+5. Turn the badge's battery switch **off** while using USB. Connect a
+   **USB data cable**, then choose an option.
+
+If macOS will not open the downloaded script, open a terminal in the
+extracted folder and run `python3 start.py` instead. You don't need to
+disable system security settings. On Linux, use your distribution's serial
+port permissions; do not run the whole tool as root.
+
+Already installed the dependencies? `python badge_backup.py` also opens the
+menu. ESP-IDF and a C compiler are **not** required.
 
 ## Back up
 
-Switch battery power **off** while using USB and connect the badge.
-Copy **your own** serial value from `list`:
+Choose **1**, select your badge, use the default automatic connection mode,
+and confirm. The tool:
 
-```sh
-python badge_backup.py backup --serial YOUR_USB_SERIAL
-```
+1. Restarts/stops the current app.
+2. Reads all **4 MiB** of flash.
+3. Compares the saved dump against the actual device while the app is stopped.
+4. Records its SHA-256 and reboots the badge.
 
-With exactly one matching device connected, automatic selection also works:
+The menu shows progress and the saved folder. Backups live in **`backups/`**
+beside the script. Copy the **entire backup folder** to another private,
+reliable storage location.
 
-```sh
-python badge_backup.py backup
-```
+**This captures what's installed now.** If you already installed a custom
+game/app, the backup contains that—not the original factory firmware.
 
-Optional explicit port and a **new** output directory:
+## Restore
 
-```sh
-python badge_backup.py backup --port /dev/cu.usbmodemXXXX --output backups/original
-# Windows example: --port COM5
-# Linux example:   --port /dev/ttyACM0
-```
+Choose **2**, pick a saved backup (or paste a backup folder path), select the
+**same badge it came from**, and type **`RESTORE`** at the warning.
 
-The tool checks the native Espressif USB ID `303a:1001`, then pins the selected
-USB serial for every operation. That ID is shared by other Espressif boards:
-it does **not** prove the board is an HTN badge. You are responsible for
-connecting the intended board. The chip must identify as ESP32-C3 and report
-4 MiB flash. Different badge years, bridge chips, and other variants are
-not supported.
+> **A full restore replaces all firmware AND settings.** Contacts, app data,
+> and progress revert to the selected backup. Keep USB connected and do not
+> interrupt it.
 
-Successful output contains:
+Before writing anything, the tool:
 
-```text
-backups/<UTC timestamp>/
-  flash.bin       # exactly 4,194,304 bytes — PRIVATE
-  manifest.json   # hash, verification state, device identity — PRIVATE
-  SHA256SUMS
-  operations.log  # esptool diagnostics — PRIVATE
-```
+- Checks the source backup's size, SHA-256, and original USB identity.
+- Validates the known HTN partition table and the bootloader/application
+  image checksums and SHA-256 digests.
+- Saves and verifies a **fresh safety backup** of the badge's current flash.
+- Refuses secure-boot, encrypted, unknown-security, or changed-layout devices.
+- Stages a private copy of the selected image, so changing the original
+  backup file mid-operation cannot change what gets written.
 
-Copy the **entire folder** to another private, reliable storage location.
-Keep the original untouched before flashing anything new.
+It then restores the full image, verifies it against the device, and requests
+a reboot. No eFuse changes, `--force`, or explicit erase-all commands are used.
+Writing necessarily erases/replaces the affected flash sectors.
 
-```sh
-python badge_backup.py verify backups/<UTC-timestamp>
-```
+Your previous state remains in `backups/before-restore-.../`. Choose that
+backup later if you want to go back. Detailed restore logs and the staged
+image remain private in `.restore-history/`.
 
-`verify` checks the saved file against its recorded size/hash locally. It
-does not access hardware or authenticate a manifest an attacker has modified.
-The device comparison happens during `backup`, via esptool `verify-flash`.
-Do not treat an incomplete/failed dump as a usable recovery image.
+**An interrupted/failed write can leave the app unable to boot.** The tool
+does not automatically reboot after failed write verification or attempt
+an automatic rollback. Use the recovery steps below and retry a verified
+backup. If only the final reboot fails, verification remains recorded.
 
-## If automatic connection fails
+### What is supported?
 
-1. Close anything else using the badge's serial port.
-2. Turn battery power off and unplug USB.
+The **HTN 2026 ESP32-C3 badge with 4 MiB flash**, native Espressif USB
+`303a:1001`, and its original partition layout:
+
+| Partition | Offset | Size |
+|---|---:|---:|
+| NVS | `0x9000` | `0x4000` |
+| PHY | `0xd000` | `0x1000` |
+| Factory application | `0x10000` | `0x2a0000` |
+| Storage | `0x2b0000` | `0x140000` |
+
+The USB ID is shared with other Espressif devices; it does not prove the
+board is an HTN badge. Connect the intended board. Other badge years,
+USB bridge chips, modified layouts, raw `.bin` files without this tool's
+verified manifest, and restoring someone else's backup are not supported.
+Backups made with the initial version of this repository are compatible.
+
+## Connection / recovery help
+
+Choose **4** in the menu, or:
+
+1. Close browser IDEs, serial monitors, and other flashing tools.
+2. Turn battery power **off** and unplug USB.
 3. Hold **START**, reconnect USB, then release START.
-4. Run `list` again, then:
+4. Retry the operation and select **recovery mode** when asked.
+
+START is GPIO9, the ESP32-C3 download strap. Don't hold it during ordinary
+power-on if you want the installed application to start normally.
+
+The tool locks the chosen badge against other copies of itself. Other tools
+may not respect that lock: close them first. If an operation fails before
+any flash write, a normal power cycle should restart the existing app.
+
+## Privacy and limits
+
+Backups can contain **credentials, contacts, Wi-Fi details, and personal
+data**. Never upload `flash.bin`, manifests, or logs to GitHub. This repository
+contains **no actual badge firmware or ROMs**.
+
+Files are created privately on POSIX; check folder permissions on Windows
+too. `.gitignore` excludes backups and restore history, but is not a security
+boundary—do not force-add private files.
+
+Backup folders contain `flash.bin`, `manifest.json`, `SHA256SUMS`, and
+`operations.log`. Local hash checking detects accidental changes; it is
+not authentication against someone who can edit both file and manifest.
+
+Flash backups do **not** include eFuses or undo security provisioning or
+hardware damage. Do not casually program eFuses, enable secure boot/flash
+encryption, or disable download access. This tool does not bypass those
+protections.
+
+## Optional scripted commands
+
+The menu is the recommended interface. For automation:
 
 ```sh
-python badge_backup.py backup --serial YOUR_USB_SERIAL --manual-boot
+python3 -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+
+python badge_backup.py
+python badge_backup.py list
+python badge_backup.py backup --serial YOUR_USB_SERIAL
+python badge_backup.py verify backups/YOUR_BACKUP
+python badge_backup.py restore backups/YOUR_BACKUP --serial YOUR_USB_SERIAL --yes
 ```
 
-START is GPIO9, the ESP32-C3 ROM-download strap on this badge. Avoid holding
-it during ordinary power-on if you want the application to start normally.
-`--stay-in-bootloader` skips the final reboot. On an error, the board may
-remain in download mode; a normal power cycle will restart its existing app.
+`backup` also accepts `--output NEW_FOLDER`, `--port`, `--manual-boot`,
+and `--stay-in-bootloader`. `restore` accepts `--port` and `--manual-boot`.
+The non-interactive restore deliberately requires `--yes`; there is no
+option to bypass identity, integrity, security, or safety-backup checks.
 
-## Recovery limits
-
-This is a **backup tool, not a generic restore/flashing tool**. It captures
-the current state, not a magically pristine factory image. If you already
-replaced the application, your backup will contain that replacement.
-
-Flash backups do not include eFuses or guarantee recovery after security
-configuration changes, hardware damage, or disabled download access.
-Do not program eFuses, enable secure boot/flash encryption, or change the
-partition table casually. Security-enabled devices may reject these reads;
-this script does not bypass those protections.
-
-Never flash one person's full dump onto another badge. If you need recovery,
-retain your original backup and use board-specific instructions for your
-own device and its security settings.
-
-## Verification / development
+## Tests / verification
 
 ```sh
 python -m unittest discover -s tests -v
 ```
 
-The full-flash read + on-device digest verification workflow was exercised
-on one HTN 2026 ESP32-C3 badge on macOS during native-firmware development.
-This standalone packaging is covered by mocked tests; it has not been
-separately exercised on every OS or badge revision. No fresh device reset
-was performed just to publish it.
+Tests cover backup integrity, restore ordering, source validation, wrong
+device rejection, security failures, safety-backup failures, write/verify
+failures, locking, and menu cancellation/confirmation. Test firmware is
+synthetic, not copied from a real badge. GitHub Actions runs on macOS,
+Windows, and Linux.
 
-The script uses esptool's RAM flasher stub for read/digest operations; it does
-not install that stub into flash. The original running app is stopped before
-reading, so it cannot change filesystem/NVS contents during verification.
-On POSIX, files are created privately; Windows users should also check
-directory permissions. Git ignores dumps/manifests/logs, but **ignores are not
-a security boundary**—do not force-add private backups.
+The original read + on-device digest workflow was exercised on an HTN 2026
+badge on macOS during native-firmware development. The menu/restore wrapper
+is tested offline with synthetic images and mocked hardware; **this release's
+full restore has not been exercised on a physical badge**. The validation
+also accepts the author's original backup in a local read-only check.
+Don't confuse automated tests with a hardware recovery guarantee.
 
 Independent community utility, not an official Hack the North or Espressif
-release. MIT-licensed script; esptool and pyserial retain their own licenses.
+release. MIT-licensed; dependencies retain their own licenses.

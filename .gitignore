@@ -1,5 +1,6 @@
 # Firmware, credentials, device identity, and generated local data stay private.
 backups/
+.restore-history/
 *.bin
 *.nes
 *.elf
