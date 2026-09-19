@@ -71,7 +71,8 @@ Before writing anything, the tool:
 - Validates the known HTN partition table and the bootloader/application
   image checksums and SHA-256 digests.
 - Saves and verifies a **fresh safety backup** of the badge's current flash.
-- Refuses secure-boot, encrypted, unknown-security, or changed-layout devices.
+- Refuses secure-boot, encrypted, unknown-security devices and source backups
+  with an unsupported layout.
 - Stages a private copy of the selected image, so changing the original
   backup file mid-operation cannot change what gets written.
 
@@ -82,6 +83,11 @@ Writing necessarily erases/replaces the affected flash sectors.
 Your previous state remains in `backups/before-restore-.../`. Choose that
 backup later if you want to go back. Detailed restore logs and the staged
 image remain private in `.restore-history/`.
+
+A full restore can repair an interrupted write even when the **current**
+bootloader/partition table is damaged. The **selected source backup** must
+still contain valid bootloader/application images and the known HTN layout.
+A safety snapshot of an already broken device is not necessarily bootable.
 
 **An interrupted/failed write can leave the app unable to boot.** The tool
 does not automatically reboot after failed write verification or attempt
@@ -102,7 +108,7 @@ The **HTN 2026 ESP32-C3 badge with 4 MiB flash**, native Espressif USB
 
 The USB ID is shared with other Espressif devices; it does not prove the
 board is an HTN badge. Connect the intended board. Other badge years,
-USB bridge chips, modified layouts, raw `.bin` files without this tool's
+USB bridge chips, source backups with modified layouts, raw `.bin` files without this tool's
 verified manifest, and restoring someone else's backup are not supported.
 Backups made with the initial version of this repository are compatible.
 

@@ -277,10 +277,10 @@ def restore(source, serial=None, port=None, *, confirmed=False, manual_boot=Fals
             security = invoke(identity, "get-security-info", [], history)
             check_security(security)
             verify_local(safety)
-            current = (safety / "flash.bin").read_bytes()
-            validate_layout(current)
-            if current[0x8000:0x9000] != data[0x8000:0x9000]:
-                raise ValueError("Current partition table differs; automatic restore refused.")
+            # A full restore must also work after an interrupted flash has
+            # damaged the current bootloader/table. Validate the SOURCE layout,
+            # not the broken current one. Identity/security/size and the fresh
+            # verified safety snapshot remain mandatory.
             frozen = history / "restore-image.bin"
             frozen.write_bytes(data)
             frozen.chmod(0o600)

@@ -133,7 +133,7 @@ class RestoreTests(unittest.TestCase):
             self.run_restore()
         self.assertEqual(self.calls, ["safety"])
 
-    def test_changed_current_layout_never_writes(self):
+    def test_damaged_current_layout_can_be_recovered(self):
         original = self.fake_safety
         def changed(*args, **kwargs):
             result = original(*args, **kwargs)
@@ -145,9 +145,9 @@ class RestoreTests(unittest.TestCase):
             app.write_manifest(args[0], info)
             return result
         with patch.object(self, "fake_safety", side_effect=changed):
-            with self.assertRaises(ValueError):
-                self.run_restore()
-        self.assertNotIn("write-flash", self.calls)
+            result = self.run_restore()
+        self.assertEqual(result["state"], "verified")
+        self.assertIn("write-flash", self.calls)
 
     def test_corrupt_safety_copy_never_writes(self):
         original = self.fake_safety
